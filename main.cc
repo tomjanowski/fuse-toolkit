@@ -11,7 +11,20 @@
 #include <time.h>
 using namespace std;
 char * test_file=NULL;
-long SIZE=1024L*1024*1024*16;
+const long SIZE=512;
+const long SECTOR=512;
+const long OFFSET=4096;
+const long CHUNK=512*1024;
+long ndev=4;
+int fds[100]={};
+const char *files[]={"/home/janowski/RAID/file1",
+                     "/home/janowski/RAID/file2",
+                     "/home/janowski/RAID/file3",
+                     "/home/janowski/RAID/file4",
+                     "/home/janowski/RAID/file5",
+                      NULL};
+long tot_size=0;
+long dev_size=0;
 //int fd;
 fuse_operations x;
 time_t now;
@@ -33,7 +46,7 @@ if (string(path)=="/test_file") {
   st->st_nlink=1;
   st->st_uid=0;
   st->st_gid=0;
-  st->st_size=SIZE;
+  st->st_size=tot_size;
   st->st_atim.tv_sec=now;
   st->st_mtim.tv_sec=now;
   st->st_ctim.tv_sec=now;
@@ -59,16 +72,28 @@ int tjread(const char *path,char *data, size_t len, off_t off,
                         struct fuse_file_info *x) {
 cout << "read " << path << endl;
 if (string(path)=="/test_file") {
-int newlen=(((SIZE-off)<len)?SIZE-off:len);
-if (newlen<0) newlen=0;
-if (newlen) memmove(data,test_file+off,newlen);
-return newlen;
+//left_symmetric
+long off_local=0;
+for (long i=0;;++i) {
+  long chunk_no  = off/CHUNK;
+  long chunk_pos = off%CHUNK;
+  long line_no   = chunk_no/ndev;
+  long line_pos  = chunk_no%(ndev+1);
+  int rd=pread(fds[line_pos],data+off_local,SECTOR,SECTOR*OFFSET+line_no*CHUNK+chunk_pos);
+  if (rd<0) throw "Error 2";
+  off+=rd;
+  off_local+=rd;
+  if (off_local>=len) return off_local;
+  if (rd<SECTOR)      return off_local;
+}
+return -1;
 }
 return -1;
 }
 int tjwrite(const char *path,const char *data, size_t len, off_t off,
                         struct fuse_file_info *x) {
 cout << "write " << path << endl;
+return -1;
 if (string(path)=="/test_file") {
 int newlen=(((SIZE-off)<len)?SIZE-off:len);
 if (newlen<0) newlen=0;
@@ -79,10 +104,10 @@ return -1;
 }
 int tjopen(const char *path, struct fuse_file_info *x) {
 cout << "open " << path << endl;
-if (!test_file) test_file=(char*)malloc(SIZE);
+//if (!test_file) test_file=(char*)malloc(SIZE);
 return 0;
 }
-int main(int argc, char ** argv) {
+int main(int argc, char ** argv) try {
 //fd=open("log",O_RDWR|O_CREAT);
 now=time(NULL);
 x.getattr=attr;
@@ -91,6 +116,29 @@ x.readdir=readdir;
 x.read=tjread;
 x.write=tjwrite;
 x.open=tjopen;
+//
+struct stat st;
+for (int i=0;files[i];++i) {
+  if (stat(files[i],&st)<0) {
+    cerr << files[i] << " ";
+    perror("stat");
+    exit(1);
+    }
+//cout << st.st_size << endl;
+  if (!dev_size) dev_size=st.st_size-SECTOR*OFFSET;
+  if (dev_size!=(st.st_size-SECTOR*OFFSET)) throw "Devs must have the same size";
+  tot_size+=dev_size;
+  fds[i]=open(files[i],O_RDONLY);
+  if (fds[i]<0) {
+    perror("open");
+    throw "error 1";
+    }
+  }
+tot_size-=dev_size;
+cout << tot_size << endl;
+//
 fuse_main(argc, argv,&x, NULL);
 return 0;
+} catch (char const * x) {
+cerr << x << endl;
 }
