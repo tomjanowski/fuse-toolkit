@@ -17,6 +17,8 @@ const long OFFSET=4096;
 const long CHUNK=512*1024;
 long ndev=4;
 int fds[100]={};
+char *chunk_buffer[100]={};
+long current_line=-1;
 const char *files[]={"/home/janowski/RAID/file1",
                      "/home/janowski/RAID/file2",
                      "/home/janowski/RAID/file3",
@@ -79,12 +81,35 @@ for (long i=0;;++i) {
   long chunk_pos = off%CHUNK;
   long line_no   = chunk_no/ndev;
   long line_pos  = chunk_no%(ndev+1);
-  int rd=pread(fds[line_pos],data+off_local,SECTOR,SECTOR*OFFSET+line_no*CHUNK+chunk_pos);
-  if (rd<0) throw "Error 2";
-  off+=rd;
-  off_local+=rd;
-  if (off_local>=len) return off_local;
-  if (rd<SECTOR)      return off_local;
+  if (current_line!=line_no) {
+    current_line=line_no;
+    for (int k=0;k<(ndev+1);++k) {
+      int rd=pread(fds[k],chunk_buffer[k],CHUNK,SECTOR*OFFSET+line_no*CHUNK);
+      if (rd<0)     throw "Error 2";
+      if (rd<CHUNK) {
+//      cout << rd << endl;
+        return off_local;
+        }
+      }
+// check the data:
+    for (int j=0;j<CHUNK;++j) {
+      char sum=0;
+      for (int k=0;k<=ndev;++k) sum=sum^*(chunk_buffer[k]+j);
+      if (sum!=0) {
+        cerr << "wrong sum" << endl;
+        throw "error 3";
+        }
+      }
+    }
+  memmove(data+off_local,chunk_buffer[line_pos]+chunk_pos,SECTOR);
+  off+=SECTOR;
+  off_local+=SECTOR;
+  if (off_local>=len) {
+//  cout << off_local << " " << len << endl;
+    return off_local;
+    }
+// char *chunk_buffer[100]={};
+// long current_line=-1;
 }
 return -1;
 }
@@ -124,6 +149,7 @@ for (int i=0;files[i];++i) {
     perror("stat");
     exit(1);
     }
+  chunk_buffer[i]=(char*)malloc(CHUNK);
 //cout << st.st_size << endl;
   if (!dev_size) dev_size=st.st_size-SECTOR*OFFSET;
   if (dev_size!=(st.st_size-SECTOR*OFFSET)) throw "Devs must have the same size";
