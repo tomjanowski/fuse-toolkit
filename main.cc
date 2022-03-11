@@ -28,7 +28,7 @@ const char *files[]={"/dev/sdb",
                       NULL};
 long tot_size=0;
 long dev_size=0;
-string layout="ra";
+string layout="r4";
 //int fd;
 fuse_operations x;
 time_t now;
@@ -108,7 +108,7 @@ for (long i=0;;++i) {
   else if (layout=="rs") { // right-symmetric
     line_pos       = (line_no%(ndev+1)+1+chunk_no%ndev)%(ndev+1);
     }
-  else if (layout=="ra") { // right-assymetric
+  else if (layout=="ra") { // right-asymmetric
     long par_pos   =  line_no%(ndev+1);
     line_pos       = chunk_no%ndev;
     if (line_pos>=par_pos) ++line_pos;
@@ -117,6 +117,11 @@ for (long i=0;;++i) {
     long par_pos   =  ((-line_no-1)%(ndev+1)+ndev+1)%(ndev+1);
     line_pos       = chunk_no%ndev;
     if (line_pos>=par_pos) ++line_pos;
+    }
+  else if (layout=="r4") { // RAID4, parity on first
+//  long par_pos   =  line_no%(ndev+1);
+    line_pos       = chunk_no%ndev+1;
+//  if (line_pos>=par_pos) ++line_pos;
     }
   else {
     throw "Error 3: not implememted";
