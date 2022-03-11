@@ -28,7 +28,7 @@ const char *files[]={"/dev/sdb",
                       NULL};
 long tot_size=0;
 long dev_size=0;
-string layout="r4";
+string layout="ra";
 //int fd;
 fuse_operations x;
 time_t now;
@@ -74,7 +74,7 @@ return -1;
 }
 int tjread(const char *path,char *data, size_t len, off_t off,
                         struct fuse_file_info *x) {
-cout << "read " << path << endl;
+//cout << "read " << path << endl;
 if (string(path)=="/test_file") {
 long off_local=0;
 for (long i=0;;++i) {
