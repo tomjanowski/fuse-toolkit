@@ -19,14 +19,15 @@ long ndev=4;
 int fds[100]={};
 char *chunk_buffer[100]={};
 long current_line=-1;
-const char *files[]={"/home/janowski/RAID/file1",
-                     "/home/janowski/RAID/file2",
-                     "/home/janowski/RAID/file3",
-                     "/home/janowski/RAID/file4",
-                     "/home/janowski/RAID/file5",
+const char *files[]={"/home/janowski/NO_BACKUP/RAID/file1",
+                     "/home/janowski/NO_BACKUP/RAID/file2",
+                     "/home/janowski/NO_BACKUP/RAID/file3",
+                     "/home/janowski/NO_BACKUP/RAID/file4",
+                     "/home/janowski/NO_BACKUP/RAID/file5",
                       NULL};
 long tot_size=0;
 long dev_size=0;
+string layout="la";
 //int fd;
 fuse_operations x;
 time_t now;
@@ -74,13 +75,11 @@ int tjread(const char *path,char *data, size_t len, off_t off,
                         struct fuse_file_info *x) {
 cout << "read " << path << endl;
 if (string(path)=="/test_file") {
-//left_symmetric
 long off_local=0;
 for (long i=0;;++i) {
   long chunk_no  = off/CHUNK;
-  long chunk_pos = off%CHUNK;
   long line_no   = chunk_no/ndev;
-  long line_pos  = chunk_no%(ndev+1);
+  long chunk_pos = off%CHUNK;
   if (current_line!=line_no) {
     current_line=line_no;
     for (int k=0;k<(ndev+1);++k) {
@@ -100,6 +99,26 @@ for (long i=0;;++i) {
         throw "error 3";
         }
       }
+    }
+  long line_pos=ndev+1;
+  if      (layout=="ls") { // left-symmetric
+    line_pos       = chunk_no%(ndev+1);
+    }
+  else if (layout=="rs") { // right-symmetric
+    line_pos       = (line_no%(ndev+1)+1+chunk_no%ndev)%(ndev+1);
+    }
+  else if (layout=="ra") { // right-assymetric
+    long par_pos   =  line_no%(ndev+1);
+    line_pos       = chunk_no%ndev;
+    if (line_pos>=par_pos) ++line_pos;
+    }
+  else if (layout=="la") { // left-asymmetric
+    long par_pos   =  ((-line_no-1)%(ndev+1)+ndev+1)%(ndev+1);
+    line_pos       = chunk_no%ndev;
+    if (line_pos>=par_pos) ++line_pos;
+    }
+  else {
+    throw "Error 3: not implememted";
     }
   memmove(data+off_local,chunk_buffer[line_pos]+chunk_pos,SECTOR);
   off+=SECTOR;
