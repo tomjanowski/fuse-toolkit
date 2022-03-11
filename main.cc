@@ -9,25 +9,26 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <time.h>
+#include <sys/ioctl.h>
+#include <linux/fs.h>
 using namespace std;
 char * test_file=NULL;
 const long SIZE=512;
 const long SECTOR=512;
-const long OFFSET=4096;
-const long CHUNK=512*1024;
-long ndev=4;
+const long OFFSET=0;
+const long CHUNK=512;
+long ndev=3;
 int fds[100]={};
 char *chunk_buffer[100]={};
 long current_line=-1;
-const char *files[]={"/home/janowski/NO_BACKUP/RAID/file1",
-                     "/home/janowski/NO_BACKUP/RAID/file2",
-                     "/home/janowski/NO_BACKUP/RAID/file3",
-                     "/home/janowski/NO_BACKUP/RAID/file4",
-                     "/home/janowski/NO_BACKUP/RAID/file5",
+const char *files[]={"/dev/sdb",
+                     "/dev/sda",
+                     "/dev/sdd",
+                     "/dev/sdc",
                       NULL};
 long tot_size=0;
 long dev_size=0;
-string layout="la";
+string layout="ra";
 //int fd;
 fuse_operations x;
 time_t now;
@@ -163,6 +164,11 @@ x.open=tjopen;
 //
 struct stat st;
 for (int i=0;files[i];++i) {
+  fds[i]=open(files[i],O_RDONLY);
+  if (fds[i]<0) {
+    perror("open");
+    throw "error 1";
+    }
   if (stat(files[i],&st)<0) {
     cerr << files[i] << " ";
     perror("stat");
@@ -170,14 +176,20 @@ for (int i=0;files[i];++i) {
     }
   chunk_buffer[i]=(char*)malloc(CHUNK);
 //cout << st.st_size << endl;
-  if (!dev_size) dev_size=st.st_size-SECTOR*OFFSET;
-  if (dev_size!=(st.st_size-SECTOR*OFFSET)) throw "Devs must have the same size";
-  tot_size+=dev_size;
-  fds[i]=open(files[i],O_RDONLY);
-  if (fds[i]<0) {
-    perror("open");
-    throw "error 1";
+  long dev_size1=-1;
+  if ((st.st_mode&S_IFREG) == S_IFREG) {
+    dev_size1=st.st_size;
     }
+  if ((st.st_mode&S_IFBLK) == S_IFBLK) {
+    if (ioctl(fds[i],BLKGETSIZE64,&dev_size1)==-1) {
+      throw "Error 5";
+      }
+    }
+  if (!dev_size) {
+    dev_size=dev_size1-SECTOR*OFFSET;
+    }
+  if (dev_size!=(dev_size1-SECTOR*OFFSET)) throw "Devs must have the same size";
+  tot_size+=dev_size;
   }
 tot_size-=dev_size;
 cout << tot_size << endl;
